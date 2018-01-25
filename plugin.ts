@@ -6,53 +6,13 @@ import { LeaderboardResetPluginEventArguments } from "../../src/plugin-host/plug
 import { NoArgumentsPluginEventArguments } from "../../src/plugin-host/plugin-events/event-arguments/no-arguments-plugin-event-arguments";
 import { Leaderboard } from "../../src/chat/leaderboard/leaderboard";
 import * as fs from 'fs';
+import { ExtendedLeaderboard } from "./model/extended-leaderboard/extended-leaderboard";
+import { IExtendedLeaderboard } from "./model/extended-leaderboard/i-extended-leaderboard";
+import { ExtendedLeaderboardEntry } from "./model/extended-leaderboard/extended-leaderboard-entry";
+import { EXTENDED_LEADERBOARD_TIME_SEGMENT } from "./model/extended-leaderboard/extended-leaderboard-time-segment";
 
-class ExtendedLeaderboardEntry {
-  private timestamp: number;
-  private id: number;
-  private change: number;
 
-  constructor(_id: number, _change: number)
-  {
-    this.timestamp = Math.round(+new Date()/1000);
-    this.id = _id;
-    this.change = _change;
-  }
-}
 
-interface IExtendedLeaderboard 
-{
-  entries: ExtendedLeaderboardEntry[];
-}
-
-class ExtendedLeaderboard implements IExtendedLeaderboard {
-  entries: ExtendedLeaderboardEntry[];
-
-  constructor()
-  {
-    this.entries = [];
-
-  }
-
-  public FromLeaderboard(_initial: Leaderboard): void
-  {
-    let initRoot: ExtendedLeaderboardEntry[] = [];
-    this.entries = [];
-    _initial.entries.forEach(entry => {
-      this.entries.push(new ExtendedLeaderboardEntry(entry.id, entry.score));
-    });
-  }
-
-  public FromLiteral(_literal: IExtendedLeaderboard)
-  {
-    this.entries = _literal.entries;
-  }
-  
-  public RegisterUpdate(_id: number, _change: number)
-  {
-    this.entries.push(new ExtendedLeaderboardEntry(_id, _change));
-  }
-}
 
 /**
  * Example of the simplest DankTimesBot
@@ -121,7 +81,22 @@ export class Plugin extends AbstractPlugin
 
     this.registerCommand("extendedleaderboard", (_params: string[]) => 
     {
-      return [`${JSON.stringify(this.Data())}`];
+      let diff: ExtendedLeaderboardEntry[] = this.Data().CalculateScoreDiff(0, Math.round(+new Date()/1000));
+      let diffMap: Map<number, number> = new Map<number, number>();
+      diff.forEach(element => {
+        diffMap.set(element.id, (diffMap.has(element.id) ? diffMap.get(element.id) : 0) + element.change);
+      });
+
+      let Usermap: Map<number, string> = new Map<number, string>();
+      diffMap.forEach((value, key) => {
+        Usermap.set(key, this.Services().Users().find(x => x.id == key).name);
+      });
+
+      let rt = "EXTENDED LEADERBOARD\n";
+        diffMap.forEach((value, key) => {
+          rt += `${Usermap.get(key)}: ${value >= 0 ? "+" : "-" }${value}`;
+        })
+      return [rt];
     });
   }
 } 

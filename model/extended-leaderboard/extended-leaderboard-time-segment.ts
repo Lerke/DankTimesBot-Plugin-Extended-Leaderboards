@@ -1,0 +1,8 @@
+export enum EXTENDED_LEADERBOARD_TIME_SEGMENT
+{
+  HOUR,
+  DAY,
+  WEEK,
+  MONTH,
+  YEAR
+}
