@@ -4,13 +4,54 @@ import { UserScoreChangedPluginEventArguments } from "../../src/plugin-host/plug
 import { PrePostMessagePluginEventArguments } from "../../src/plugin-host/plugin-events/event-arguments/pre-post-message-plugin-event-arguments";
 import { LeaderboardResetPluginEventArguments } from "../../src/plugin-host/plugin-events/event-arguments/leaderboard-reset-plugin-event-arguments";
 import { NoArgumentsPluginEventArguments } from "../../src/plugin-host/plugin-events/event-arguments/no-arguments-plugin-event-arguments";
+import { Leaderboard } from "../../src/chat/leaderboard/leaderboard";
+import * as fs from 'fs';
 
-/**
- * Example of auxiliary data classes.
- */
-class ExtendedLeaderboardsData
+class ExtendedLeaderboardEntry {
+  private timestamp: number;
+  private id: number;
+  private change: number;
+
+  constructor(_id: number, _change: number)
+  {
+    this.timestamp = Math.round(+new Date()/1000);
+    this.id = _id;
+    this.change = _change;
+  }
+}
+
+interface IExtendedLeaderboard 
 {
-  public TestNumber: number = 0;
+  entries: ExtendedLeaderboardEntry[];
+}
+
+class ExtendedLeaderboard implements IExtendedLeaderboard {
+  entries: ExtendedLeaderboardEntry[];
+
+  constructor()
+  {
+    this.entries = [];
+
+  }
+
+  public FromLeaderboard(_initial: Leaderboard): void
+  {
+    let initRoot: ExtendedLeaderboardEntry[] = [];
+    this.entries = [];
+    _initial.entries.forEach(entry => {
+      this.entries.push(new ExtendedLeaderboardEntry(entry.id, entry.score));
+    });
+  }
+
+  public FromLiteral(_literal: IExtendedLeaderboard)
+  {
+    this.entries = _literal.entries;
+  }
+  
+  public RegisterUpdate(_id: number, _change: number)
+  {
+    this.entries.push(new ExtendedLeaderboardEntry(_id, _change));
+  }
 }
 
 /**
@@ -20,6 +61,8 @@ class ExtendedLeaderboardsData
  */
 export class Plugin extends AbstractPlugin
 {
+  protected Data: () => ExtendedLeaderboard = () => super.Data;
+
   /**
    * A plugin should call its base constructor to
    * provide it with an identifier, a version
@@ -29,23 +72,35 @@ export class Plugin extends AbstractPlugin
   {
     super("Extended Leaderboards", "0.0.1", {});
 
-    // Example of sample dat
-    this.Data = new ExtendedLeaderboardsData();
-    this.Data.TestNumber = 1;
-
-    this.subscribeToPluginEvent(PLUGIN_EVENT.PLUGIN_EVENT_PRE_MESSAGE, (_data: PrePostMessagePluginEventArguments) =>
+    this.subscribeToPluginEvent(PLUGIN_EVENT.PLUGIN_EVENT_POST_INIT, (_data: NoArgumentsPluginEventArguments) => 
     {
-      return [`Example of a Pre Message Event`];
+      if(fs.existsSync(`./data/plugins/${this.PID()}/data.json`))
+      {
+        let existingdata: IExtendedLeaderboard = JSON.parse(fs.readFileSync(`./data/plugins/${this.PID()}/data.json`, 'utf8'));
+        if(existingdata)
+        {
+          super.Data = new ExtendedLeaderboard();
+          (<ExtendedLeaderboard>super.Data).FromLiteral(existingdata);
+        }
+        else
+        {
+          super.Data = new ExtendedLeaderboard();
+          (<ExtendedLeaderboard>super.Data).FromLeaderboard(this.Services().Leaderboard());
+        }
+      }
+      else
+      {
+        super.Data = new ExtendedLeaderboard();
+        this.Data().RegisterUpdate(194823227, 5);
+        this.Data().RegisterUpdate(194823227, 5);
+        this.Data().RegisterUpdate(194823227, 5);
+      }
     });
+
     this.subscribeToPluginEvent(PLUGIN_EVENT.PLUGIN_EVENT_USER_CHANGED_SCORE, (_data: UserScoreChangedPluginEventArguments) =>
     {
-      return [`A player changed score! Player: ${_data.User.name}, change: ${_data.ChangeInScore}`,
-              `Example of current leaderboard:`,
-              `${JSON.stringify(this.Services().Leaderboard().entries)} Okay.`];
-    });
-    this.subscribeToPluginEvent(PLUGIN_EVENT.PLUGIN_EVENT_POST_MESSAGE, (_data: PrePostMessagePluginEventArguments) =>
-    {
-      return [`Example of a Post Message Event`];
+        this.Data().RegisterUpdate(_data.User.id, _data.ChangeInScore);
+      return [];
     });
     this.subscribeToPluginEvent(PLUGIN_EVENT.PLUGIN_EVENT_LEADERBOARD_RESET, (_data: LeaderboardResetPluginEventArguments) =>
     {
@@ -54,11 +109,19 @@ export class Plugin extends AbstractPlugin
     this.subscribeToPluginEvent(PLUGIN_EVENT.PLUGIN_EVENT_DANKTIMES_SHUTDOWN, (_data: NoArgumentsPluginEventArguments) => 
     {
       console.log("Shutting down plugin! " + this.Name);
+      if(!fs.existsSync('./data/plugins'))
+        fs.mkdirSync(`./data/plugins`);
+      if(!fs.existsSync(`./data/plugins/`))
+        fs.mkdirSync(`./data/plugins/`);
+      if(!fs.existsSync(`./data/plugins//${this.PID()}`))
+        fs.mkdirSync(`./data/plugins/${this.PID()}`);
+
+      fs.writeFileSync(`./data/plugins/${this.PID()}/data.json`, JSON.stringify(this.Data()));
     });
 
-    this.registerCommand("test", (_params: string[]) => 
+    this.registerCommand("extendedleaderboard", (_params: string[]) => 
     {
-      return [`success: ${JSON.stringify(_params)}`]; 
-    })
+      return [`${JSON.stringify(this.Data())}`];
+    });
   }
 } 
